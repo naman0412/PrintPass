@@ -96,20 +96,11 @@ app.use('/api', healthRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/shops', shopRoutes);
 
-// Dynamically mount future phase routes if available
-try {
-  const jobRoutes = require('./routes/jobs');
-  app.use('/api/jobs', jobRoutes);
-} catch (e) {
-  // Mounted in Phase 2/3
-}
+const jobRoutes = require('./routes/jobs');
+app.use('/api/jobs', jobRoutes);
 
-try {
-  const fileRoutes = require('./routes/files');
-  app.use('/api/files', fileRoutes);
-} catch (e) {
-  // Mounted in Phase 2
-}
+const fileRoutes = require('./routes/files');
+app.use('/api/files', fileRoutes);
 
 try {
   const paymentRoutes = require('./routes/payments');
