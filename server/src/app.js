@@ -102,12 +102,8 @@ app.use('/api/jobs', jobRoutes);
 const fileRoutes = require('./routes/files');
 app.use('/api/files', fileRoutes);
 
-try {
-  const paymentRoutes = require('./routes/payments');
-  app.use('/api/payments', paymentRoutes);
-} catch (e) {
-  // Mounted in Phase 3
-}
+const paymentRoutes = require('./routes/payments');
+app.use('/api/payments', paymentRoutes);
 
 try {
   const agentRoutes = require('./routes/agent');
