@@ -24,6 +24,9 @@ yarn-error.log*
 # Testing
 coverage/
 
+# Documentation / Planning
+docs/
+
 # OS / Editor
 .DS_Store
 Thumbs.db

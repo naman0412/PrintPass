@@ -2,115 +2,194 @@
 
 > **"Skip the queue. Print on time."**
 
-PrintPass is a production-ready, multi-tenant MERN cloud print scheduling and automation platform designed specifically for college campuses and photocopy shops. Students can upload documents from anywhere, customize print options with real-time dynamic pricing and wait estimations, pay online, and reserve a guaranteed pickup slot. Photocopy shops receive a live queue counter dashboard and an autonomous background Print Agent that prints paid jobs automatically directly to physical printers without requiring staff to download or inspect student files. Files are permanently deleted immediately upon pickup.
+PrintPass is a modern, production-ready, multi-tenant cloud print scheduling and counter automation platform built for college campuses and photocopy shops. 
+
+Traditional campus print shops create immense friction: students wait in 30-minute lines between lectures, hand over personal flash drives or email unencrypted documents to strangers, and have no visibility into printing costs or turnaround times. Shopkeepers are overwhelmed with manual file handling, downloading attachments, configuring printer dialogs, and dealing with crowded counters.
+
+**PrintPass solves this completely:**
+* Students upload documents from their dorm or phone, configure print options, receive instant server-calculated prices and estimated wait times, pay digitally, and get a fixed pickup slot with a QR pass.
+* Shopkeepers get a live counter queue dashboard with high-contrast finishing badges and an autonomous background **Print Agent** that downloads paid jobs and prints them automatically to physical printers.
+* **Complete Zero Document Retention:** Files are never previewed or downloaded by shop staff, and are permanently wiped from the database the moment the student collects their printout.
 
 ---
 
-## 🌟 Key Features
+## 🌟 Key Highlights & Innovations
 
-* **Multi-Tenant Architecture:** Works for any campus print shop. Each shop customizes its own per-page rates, duplex discounts, binding addons, operating hours, slot capacities, and operator staff.
-* **3-Tap Student Ordering Flow:**
+* **🏢 Multi-Tenant SaaS Architecture:** Designed for any campus shop. Each shop independently manages its operating hours, per-page B/W and color pricing, duplex discounts, binding addons (spiral, staple, 2-hole punch), slot durations, maximum capacity limits, and staff operators.
+* **📱 3-Tap Student Ordering:**
   1. Select Campus Shop
-  2. Drag & Drop Document (PDF, Word, PowerPoint, Images)
-  3. Customize Options & Pay (Razorpay or Mock Fallback) -> Instant Pickup Pass with QR code
-* **Zero Document Retention (Privacy First):** Files are streamed directly into MongoDB GridFS. The moment an order is marked `COLLECTED`, the file is purged from the database. A 10-minute cron sweeps expired drafts, cancelled orders, and uncollected jobs.
-* **No File Download for Counter Staff:** The shop dashboard intentionally forbids staff from previewing or downloading files. Only the background Print Agent can download the document using a 2-minute signed HMAC URL.
-* **Autonomous Print Agent (`/agent`):** A lightweight desktop daemon for Windows workstations that polls paid jobs, spools them to physical printers via `pdf-to-printer`, handles mixed color/B&W by splitting pages, and securely wipes local scratch files.
-* **Atomic Slot Capacity Engine:** Prevents overbooking under concurrent student checkouts using atomic MongoDB updates with 5-minute hold windows.
-* **Real-Time Synchronization:** Socket.IO pushes order status updates across students, counter staff, and print agents instantaneously.
+  2. Upload Document (PDF, Word DOC/DOCX, PowerPoint PPT/PPTX, PNG, JPG)
+  3. Customize Options & Pay (Razorpay or Mock Mode) $\rightarrow$ Receive Instant Pickup Pass with QR Code
+* **🔒 Strict Privacy & Zero Document Retention:**
+  * Files are stored as encrypted binary chunks in MongoDB GridFS (never on ephemeral server disks).
+  * Counter staff **cannot** preview or download documents from the dashboard.
+  * Only the background Print Agent can download the document using a 2-minute cryptographically signed HMAC URL.
+  * The exact second an order is marked `COLLECTED`, the document is permanently shredded from GridFS.
+  * A 10-minute automated cron sweeps cancelled orders, unrecoverable failures, and abandoned uploads.
+* **🤖 Autonomous Desktop Print Agent (`/agent`):** A lightweight background daemon for Windows/Linux counter workstations. It polls for paid jobs, spools them to physical printers via `pdf-to-printer`, handles mixed color/B&W documents by splitting pages via `pdf-lib`, and securely wipes local temporary files.
+* **⏱️ Atomic Slot Capacity & Anti-Overbooking Engine:** Uses atomic MongoDB `$expr` conditional operators to guarantee that slot capacity cannot be overbooked under heavy concurrent student checkout requests. Holds slots for 5 minutes during checkout.
+* **⚡ Live Synchronization:** Real-time bi-directional status updates powered by Socket.IO rooms scoped by `jobId` and `shopId`.
 
 ---
 
-## 🏗️ System Architecture
+## 🔄 How PrintPass Works (End-to-End Workflow)
 
 ```mermaid
-flowchart TD
-    subgraph Clients["Frontend Clients"]
-        StudentUI["📱 Student Mobile Web (React + Vite)"]
-        ShopUI["🖥️ Counter Queue Dashboard (React + Vite)"]
-    end
+sequenceDiagram
+    autonumber
+    actor Student as 📱 Student
+    participant Web as 🌐 Web Client (React)
+    participant API as 🚀 Express API & GridFS
+    participant DB as 🗄️ MongoDB Atlas
+    participant Agent as 🤖 Desktop Print Agent
+    actor Operator as 🏪 Shop Operator
 
-    subgraph Server["API Gateway & Services (Node 20 + Express)"]
-        API["REST Gateway & Socket.IO Server"]
-        Auth["JWT & Multi-Tenant RBAC"]
-        Pricing["Dynamic Pricing & Wait Calculator"]
-        Slots["Atomic Slot Reservation Engine"]
-        FSM["Job State Machine (FSM)"]
-        Cleanup["Privacy Cleanup Cron (10 min)"]
-    end
+    Note over Student,API: 1. Upload & Real-Time Quote
+    Student->>Web: Uploads document & selects options (B/W, Duplex, Spiral)
+    Web->>API: POST /api/jobs/quote (File + Options)
+    API->>API: Magic-byte check, page count (pdf-lib), calculate exact price & wait
+    API-->>Web: Returns Price breakdown (₹) + Estimated wait (mins)
 
-    subgraph Storage["Persistence & Media Layer"]
-        Atlas[("MongoDB Atlas")]
-        GridFS[("MongoDB GridFS (Encrypted Binary Chunks)")]
-    end
+    Note over Student,DB: 2. Atomic Slot Reservation & Payment
+    Student->>Web: Selects 10:15 AM Slot & Clicks "Pay & Reserve"
+    Web->>API: POST /api/jobs/hold-slot (5-minute atomic lock)
+    API->>DB: Atomic decrement available capacity ($expr)
+    Web->>API: POST /api/payments/create-order & /verify
+    API->>DB: Transitions Job to QUEUED, generates 6-character Pickup Code & QR Token
+    API-->>Web: Emits Socket.IO 'order:updated' (Status: QUEUED)
 
-    subgraph Hardware["Counter Workstation"]
-        Agent["🤖 PrintPass Agent (Daemon)"]
-        Printer["🖨️ Physical Campus Printer"]
-    end
+    Note over Agent,Operator: 3. Autonomous Hands-Free Printing
+    Agent->>API: GET /api/agent/jobs/next (Authenticated via x-agent-key)
+    API-->>Agent: Returns Job + 2-Minute Signed HMAC Download URL
+    Agent->>API: Downloads document stream
+    Agent->>Agent: Spools directly to physical printer (splits Color & B/W if mixed)
+    Agent->>API: PATCH /api/agent/jobs/:id/status (PRINTED)
+    API-->>Operator: Live Queue Dashboard updates with finishing badge (e.g. SPIRAL)
 
-    StudentUI -->|"Upload & Configure (REST)"| API
-    ShopUI -->|"Verify Pickup & Live Queue (REST + WS)"| API
-    API --> Auth
-    API --> Pricing
-    API --> Slots
-    API --> FSM
-    API -->|"Stream File Chunks"| GridFS
-    API -->|"State & Metadata"| Atlas
-    Cleanup -->|"Purge Files on Expiry"| GridFS
-    Agent -->|"Poll Next Job & Report Status"| API
-    API -->|"2-Minute Signed Download URL"| Agent
-    Agent -->|"Spool Print Job"| Printer
+    Note over Student,Operator: 4. Pickup & Immediate Document Shredding
+    Operator->>Operator: Assembles finishing (if required) & marks READY
+    Student->>Operator: Arrives at counter, shows QR Code / Pickup Pass
+    Operator->>API: POST /api/jobs/verify-pickup (Scans QR or enters 6-char code)
+    API->>DB: Transitions Job to COLLECTED
+    API->>DB: PERMANENTLY DELETES file from GridFS & records fileDeletedAt
+    API-->>Student: Emits Socket.IO 'order:updated' (Status: COLLECTED)
 ```
 
 ---
 
-## 📁 Repository Structure
+## 🧮 Mathematical Engine & Formulas
+
+### 1. Dynamic Server-Side Pricing Engine
+Pricing is strictly calculated by the server and never trusted from the client:
+$$\text{Base Cost} = (\text{BW Pages} \times \text{Shop.bwRate}) + (\text{Color Pages} \times \text{Shop.colorRate})$$
+$$\text{Discount} = \text{Duplex Discount (per double-sided sheet)}$$
+$$\text{Binding Cost} = \text{Shop.spiral} + \text{Shop.staple} + \text{Shop.punch}$$
+$$\text{Total Price} = \left[ (\text{Base Cost} - \text{Discount}) \times \text{PaperSize Multiplier} + \text{Binding Cost} \right] \times \text{Copies}$$
+
+### 2. Live Queue Wait Estimation
+The wait time dynamically factors in current printer queue backlog, printer speed, and finishing overhead:
+$$\text{Estimated Wait (min)} = \left\lceil \frac{\text{Pages Queued Ahead}}{\text{Shop Pages-Per-Minute}} \right\rceil + \text{Finishing Time} + 5\text{ min Buffer}$$
+
+### 3. Atomic Slot Concurrency Formula
+To eliminate race conditions when dozens of students click "Pay" at the same instant for the last slot, slot reservation executes via an atomic MongoDB conditional check:
+$$\text{Available Pages} = \text{maxPages} - (\text{bookedPages} + \text{heldPages}) \ge \text{jobPages}$$
+$$\text{Available Jobs} = \text{maxJobs} - (\text{bookedJobs} + \text{heldJobs}) \ge 1$$
+If both conditions satisfy atomically, `heldPages` and `heldJobs` are incremented and a 5-minute hold timer is initialized.
+
+---
+
+## 🚦 Finite State Machine (Job Lifecycle)
+
+All job transitions are enforced by a centralized service module (`server/src/services/jobStateMachine.js`). Any unauthorized or invalid transition throws an HTTP `409 Conflict`.
+
+```
+[DRAFT]
+   │
+   ▼
+[PENDING_PAYMENT] ──(5-Min Timeout / User Cancel)──> [CANCELLED] (Capacity Released)
+   │
+   ▼ (Payment Signature Verified)
+[QUEUED] ─────────(User Cancel Prior to Print)────> [CANCELLED] (Auto Refund Issued)
+   │
+   ▼ (Agent Claims Job)
+[PRINTING] ───────(Paper Jam / Hardware Error)────> [FAILED] (Retry or Refund)
+   │
+   ▼
+[PRINTED]
+   │
+   ├─► [FINISHING] (If Spiral, Staple, or Hole Punch required)
+   │        │
+   │        ▼ (Operator marks completed)
+   └─► [READY] (If no binding required)
+            │
+            ├─► [COLLECTED] 💥 (QR / Code Verified -> INSTANT GRIDFS PURGE)
+            │
+            └─► [NO_SHOW]   (24h Uncollected -> Purged by Cron)
+```
+
+---
+
+## 🛡️ Privacy & Security Architecture
+
+1. **Zero Document Retention Policy:**
+   * **On Pickup:** The exact moment a student presents their 6-character code or QR pass and the operator marks `COLLECTED`, GridFS binary chunks are deleted immediately and `fileDeletedAt` is recorded in the audit log.
+   * **10-Minute Privacy Cron:** Sweeps and shreds files for `CANCELLED`, `FAILED`, and `NO_SHOW` jobs, as well as unattached uploads older than 60 minutes.
+2. **Counter Screen Privacy Safeguard:**
+   * The shop dashboard intentionally exposes **no** file download buttons or document preview modals. Staff only see metadata: page count, color mode, duplex option, and binding notes.
+3. **2-Minute HMAC Signed Agent URLs:**
+   * Print Agents authenticate using an exclusive per-shop `AGENT_KEY`.
+   * Download URLs are cryptographically signed with HMAC SHA-256 (`AGENT_SIGNING_SECRET`) and expire after strictly 120 seconds.
+4. **Hardened Web Security:**
+   * **HTTP Cookies:** JWT session tokens stored in `httpOnly`, `SameSite=Lax`, `Secure` cookies.
+   * **Magic-Byte Header Inspection:** Validates binary headers (rejects disguised executables or corrupt files).
+   * **Sanitization:** `express-mongo-sanitize` prevents NoSQL injection; `helmet` configures Content Security Policy (CSP); `express-rate-limit` prevents brute-force.
+   * **Multi-Tenant Shop Isolation:** Every operator and owner query is scoped strictly by `req.shopId`.
+
+---
+
+## 📁 Monorepo Structure
 
 ```
 printpass/
-├── server/                 # Express backend API & Socket.IO server
+├── server/                     # Express backend API & Socket.IO server
 │   ├── src/
-│   │   ├── config/         # Database, Multer, and environment config
-│   │   ├── cron/           # 10-minute privacy file cleanup daemon
-│   │   ├── middleware/     # Auth, RBAC, file validation, rate limiting
-│   │   ├── models/         # Mongoose schemas (User, Shop, Job, Slot, Payment, AuditLog)
-│   │   ├── routes/         # Express REST API route handlers
-│   │   ├── services/       # State machine, pricing, slots, payments, file service
-│   │   ├── app.js          # Express app configuration & middleware pipeline
-│   │   ├── server.js       # HTTP server bootstrap & Socket.IO setup
-│   │   └── seed.js         # Initial demo shop, operator, and student seeder
-│   └── tests/              # Jest + Supertest suites (Phases 1-4)
-├── client/                 # React 18 + Vite + Tailwind CSS frontend
+│   │   ├── config/             # DB connection, Multer, Environment variables
+│   │   ├── cron/               # 10-minute privacy file shredder daemon
+│   │   ├── middleware/         # Auth, RBAC, magic-byte file validation, rate limiting
+│   │   ├── models/             # Mongoose schemas: User, Shop, Job, Slot, Payment, AuditLog
+│   │   ├── routes/             # API routes: /api/auth, /api/jobs, /api/payments, /api/agent
+│   │   ├── services/           # State Machine, Pricing, Slots, Payments, GridFS streaming
+│   │   ├── app.js              # Express app pipeline, security headers, SPA fallback
+│   │   ├── server.js           # Server bootstrap & Socket.IO event handler
+│   │   └── seed.js             # Initial database seeder (Demo shop, staff, student)
+│   └── tests/                  # Jest + Supertest suites (48 tests)
+├── client/                     # React 18 + Vite + Tailwind CSS frontend
 │   ├── src/
-│   │   ├── components/     # UI components (Upload, LiveQuoteCard, SlotPicker, etc.)
-│   │   ├── context/        # Auth and Toast notification providers
-│   │   ├── pages/          # Student (Home, Orders) & Shop (Queue, Settings, Earnings)
-│   │   └── test/           # Vitest + React Testing Library test suites
+│   │   ├── components/         # Modular UI (FileUpload, LiveQuoteCard, SlotPicker, PickupPass)
+│   │   ├── context/            # AuthContext and Toast notification system
+│   │   ├── pages/              # Student flow (Home, Orders) & Shop (Queue, Earnings, Settings)
+│   │   └── test/               # Vitest + React Testing Library suites (9 tests)
 │   ├── index.html
 │   └── vite.config.js
-├── agent/                  # Autonomous desktop print agent daemon
-│   ├── src/                # Poller, printer wrapper, PDF splitter, shredder
-│   ├── tests/              # Agent Jest unit test suite
-│   └── README.md           # Windows Task Scheduler installation guide
-├── docs/                   # IEEE SRS & PRD specifications
-│   ├── PRD.md              # Product Requirements Document
-│   └── SRS.md              # Software Requirements Specification
-├── Dockerfile              # Production multi-stage Docker build with LibreOffice
-├── render.yaml             # Render infrastructure blueprint
-└── package.json            # Monorepo orchestration scripts
+├── agent/                      # Desktop print agent daemon
+│   ├── src/                    # Poller, pdf-to-printer wrapper, PDF splitter, shredder
+│   ├── tests/                  # Agent unit tests (9 tests)
+│   └── README.md               # Windows Task Scheduler & printer setup instructions
+├── Dockerfile                  # Production container with Node 20, fonts & LibreOffice
+├── render.yaml                 # Render.com Infrastructure-as-Code blueprint
+└── package.json                # Monorepo management scripts
 ```
 
 ---
 
-## 🚀 Quick Start (Local Development)
+## ⚡ Quick Start (Local Setup)
 
 ### 1. Prerequisites
 * **Node.js:** v20.x or higher
-* **MongoDB:** Local MongoDB instance (`mongodb://127.0.0.1:27017/printpass`) or MongoDB Atlas URI.
+* **MongoDB:** Local MongoDB instance running on `mongodb://127.0.0.1:27017/printpass` or MongoDB Atlas URI.
 
 ### 2. Installation
-Install all dependencies across root, server, client, and agent with one command:
+Install all dependencies across the entire monorepo in one command:
 ```bash
 npm run install-all
 ```
@@ -120,85 +199,60 @@ Copy `.env.example` to `server/.env`:
 ```bash
 cp .env.example server/.env
 ```
-*(Default settings connect to local MongoDB with MOCK payments automatically enabled.)*
+*(By default, `.env.example` is ready for local execution with local MongoDB and the built-in MOCK payment simulator).*
 
 ### 4. Database Seeding
-Populate the database with a demo campus shop, test pricing, and test accounts:
+Seed the database with a demo campus shop, realistic pricing tiers, and pre-configured accounts:
 ```bash
 npm run seed
 ```
 
-### 5. Start Full Development Stack
-Run both the Express server and Vite frontend concurrently:
+### 5. Launch Full Stack
+Run the Express API and Vite React frontend concurrently:
 ```bash
 npm run dev
 ```
-* **Student App & Shop Counter:** Open `http://localhost:5173`
-* **Backend API & Health Check:** `http://localhost:5000/api/health`
+* **Student Web Application & Shop Dashboard:** Open [`http://localhost:5173`](http://localhost:5173)
+* **Backend Health Check:** Open [`http://localhost:5000/api/health`](http://localhost:5000/api/health)
 
 ---
 
 ## 👥 Demo Logins
 
-The seed script creates the following pre-configured accounts:
+The database seeder configures the following demo credentials. The login screen also provides **1-Click Demo Login** shortcuts:
 
-| Role | Email | Password | Assigned Shop | Dashboard Route |
+| Role | Email | Password | Assigned Shop | Features & View |
 |---|---|---|---|---|
-| **Student** | `student@printpass.local` | `StudentPass123!` | *None (Any shop)* | `/` |
-| **Shop Operator** | `operator@printpass.local` | `OperatorPass123!` | Campus Central Photocopy | `/shop` |
-| **Shop Owner** | `owner@printpass.local` | `OwnerPass123!` | Campus Central Photocopy | `/shop/settings` |
-
-> *Tip: The Login page features 1-Click quick login buttons for instant access to each demo role.*
+| **Student** | `student@printpass.local` | `StudentPass123!` | *Any Shop* | Document upload, live quote, slot picker, active pass & status timeline (`/`, `/orders`) |
+| **Shop Operator** | `operator@printpass.local` | `OperatorPass123!` | Campus Central Photocopy | Live queue cards, colored option badges, finishing checklist, QR code verification (`/shop`) |
+| **Shop Owner** | `owner@printpass.local` | `OwnerPass123!` | Campus Central Photocopy | Pricing configuration, slot capacity controls, earnings reports, agent key management (`/shop/settings`, `/shop/earnings`) |
 
 ---
 
-## ⚙️ Environment Variables Reference
+## 🤖 Desktop Print Agent Setup (`/agent`)
 
-| Variable | Description | Default / Example |
-|---|---|---|
-| `NODE_ENV` | Runtime environment (`development` or `production`) | `development` |
-| `PORT` | API server listen port | `5000` |
-| `HOST` | Bind address | `0.0.0.0` |
-| `MONGODB_URI` | MongoDB connection string (Atlas or local) | `mongodb://127.0.0.1:27017/printpass` |
-| `JWT_SECRET` | Secret key for signing authentication JWTs | *(Min 32 characters)* |
-| `COOKIE_SECRET` | Secret key for signing secure cookies | *(Random string)* |
-| `AGENT_SIGNING_SECRET` | HMAC secret for generating 2-minute agent download URLs | *(Random string)* |
-| `CLIENT_URL` | Frontend origin for CORS and Socket.IO | `http://localhost:5173` |
-| `RAZORPAY_KEY_ID` | Razorpay API key ID *(leave blank to use Mock mode)* | `rzp_test_...` |
-| `RAZORPAY_KEY_SECRET` | Razorpay API key secret | *(Secret)* |
-| `RAZORPAY_WEBHOOK_SECRET`| Razorpay Webhook signature secret | *(Secret)* |
-| `SMTP_HOST` | Nodemailer SMTP server host *(optional)* | `smtp.gmail.com` |
-| `SMTP_PORT` | SMTP port | `587` |
-| `SMTP_USER` | SMTP username | *(Email address)* |
-| `SMTP_PASS` | SMTP password / app password | *(Password)* |
-| `SMTP_FROM` | Outgoing email sender string | `PrintPass <no-reply@printpass.local>` |
+The print agent is built to run on the print shop's counter workstation connected to physical printers.
 
----
-
-## 🤖 Print Agent Setup (`/agent`)
-
-The agent is designed to run silently on the counter workstation connected to the physical printer.
-
-1. Navigate to `/agent` and copy `.env.example` to `.env`:
+1. Navigate to `/agent` and copy the environment template:
    ```bash
    cd agent
    cp .env.example .env
    ```
 2. Configure settings:
    * `SERVER_URL=http://localhost:5000` (or your Render production URL)
-   * `AGENT_KEY=campus-agent-key-secret-12345` (Find this in the Shopkeeper Settings tab)
-   * `PRINTER_NAME=` (Leave empty for default system printer, or specify exact name)
-   * `DRY_RUN=true` (Set to `false` for real paper printing)
-3. Start the agent:
+   * `AGENT_KEY=campus-agent-key-secret-12345` (Retrieved from the Shop Settings tab)
+   * `PRINTER_NAME=` (Leave empty to use the system default printer, or enter the exact name)
+   * `DRY_RUN=true` (Set to `false` when connected to physical paper printers)
+3. Launch the agent:
    ```bash
    npm start
    ```
 
 ### Running as a Windows Background Task (Startup)
-1. Open **Task Scheduler** on Windows (`taskschd.msc`).
-2. Click **Create Basic Task** -> Name it "PrintPass Agent".
+1. Open Windows **Task Scheduler** (`taskschd.msc`).
+2. Click **Create Basic Task** $\rightarrow$ Name it "PrintPass Agent".
 3. Trigger: **When I log on**.
-4. Action: **Start a program**.
+4. Action: **Start a program**:
    * Program: `node.exe` (or path to `npm.cmd`)
    * Arguments: `src/agent.js`
    * Start in: `C:\path\to\printpass\agent`
@@ -206,47 +260,45 @@ The agent is designed to run silently on the counter workstation connected to th
 
 ---
 
-## 🚢 Deployment to Render.com & MongoDB Atlas
+## 🚢 Deploying to Render.com & MongoDB Atlas
 
-### Step 1: MongoDB Atlas Database Setup
-1. Create a free cluster on [MongoDB Atlas](https://www.mongodb.com/cloud/atlas).
+### 1. MongoDB Atlas Setup
+1. Create a free M0 cluster at [mongodb.com/cloud/atlas](https://www.mongodb.com/cloud/atlas).
 2. Under **Network Access**, add `0.0.0.0/0` (Allow Access from Anywhere).
-3. Under **Database Access**, create a user with Read & Write privileges.
-4. Copy your connection string (e.g., `mongodb+srv://user:pass@cluster0.mongodb.net/printpass?retryWrites=true&w=majority`).
+3. Under **Database Access**, create a user with Read & Write permissions.
+4. Copy your connection URI (`mongodb+srv://user:pass@cluster.mongodb.net/printpass?retryWrites=true&w=majority`).
 
-### Step 2: Render.com Deployment via Blueprint
+### 2. Render.com Deployment via Blueprint
 1. Push your repository to GitHub.
-2. In [Render Dashboard](https://dashboard.render.com), click **New +** -> **Blueprint**.
+2. In the [Render Dashboard](https://dashboard.render.com), click **New +** $\rightarrow$ **Blueprint**.
 3. Select your GitHub repository (`printpass`).
-4. Render will automatically detect `render.yaml` and configure:
-   * **Runtime:** Docker (builds via multi-stage `Dockerfile` with LibreOffice + Node 20)
-   * **Health Check Path:** `/api/health`
-5. In the Render Environment Variables tab, fill in:
-   * `MONGODB_URI`: Your MongoDB Atlas connection URI
-   * `CLIENT_URL`: Your Render app URL (e.g., `https://printpass-service.onrender.com`)
-   * `RAZORPAY_KEY_ID` & `RAZORPAY_KEY_SECRET` *(optional - leaves empty to run in MOCK payment mode)*
-6. Click **Apply**. Render will build the Docker container and deploy the app with single-origin SPA serving and API routing.
+4. Render will read `render.yaml` and configure:
+   * **Runtime:** Docker (builds via multi-stage `Dockerfile` with Node 20, fonts, and headless LibreOffice).
+   * **Health Check Path:** `/api/health`.
+5. Under Environment Variables, supply:
+   * `MONGODB_URI`: Your MongoDB Atlas URI.
+   * `CLIENT_URL`: Your Render application URL (e.g., `https://printpass-service.onrender.com`).
+   * `RAZORPAY_KEY_ID` & `RAZORPAY_KEY_SECRET` *(optional - leave empty to run in MOCK payment mode)*.
+6. Click **Apply**. Render will build the container, serve the compiled React SPA, and mount the Express API.
 
 ---
 
 ## 🧪 Comprehensive Verification & Test Suites
 
-PrintPass contains automated test suites across every workspace.
-
 ```bash
-# Run all tests across the monorepo
+# Run all tests across the monorepo (66 tests)
 npm test
 
-# Run server unit & integration tests (48 tests)
+# Run server test suites (48 tests)
 npm --prefix server test
 
 # Run client Vitest suite (9 tests)
 npm --prefix client test
 
-# Run print agent tests (9 tests)
+# Run print agent unit tests (9 tests)
 npm --prefix agent test
 
-# Check linting standards across the codebase
+# Run ESLint across server and client
 npm run lint
 
 # Compile client production bundle
@@ -256,4 +308,4 @@ npm run build
 ---
 
 ## 📄 License
-MIT License - Developed with focus on campus privacy and operational speed.
+MIT License - Designed for high-speed, privacy-first campus printing.
