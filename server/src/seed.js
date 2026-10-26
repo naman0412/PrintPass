@@ -3,9 +3,9 @@ const Shop = require('./models/Shop');
 const { connectDB } = require('./config/db');
 require('dotenv').config();
 
-const seed = async () => {
+const seed = async (options = { exitOnComplete: true }) => {
   try {
-    console.log('[Seed] Connecting to MongoDB...');
+    console.log('[Seed] Checking/Connecting to MongoDB...');
     await connectDB();
     console.log('[Seed] Database connected.');
 
@@ -84,10 +84,16 @@ const seed = async () => {
     console.log('3. Student:  student@printpass.local  / password123');
     console.log('=========================================\n');
 
-    process.exit(0);
+    if (options.exitOnComplete) {
+      process.exit(0);
+    }
+    return demoShop;
   } catch (err) {
     console.error('[Seed] Error seeding database:', err);
-    process.exit(1);
+    if (options.exitOnComplete) {
+      process.exit(1);
+    }
+    throw err;
   }
 };
 

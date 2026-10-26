@@ -71,6 +71,19 @@ const startServer = async () => {
     await connectDB();
     console.log('[DB] Connected to MongoDB Atlas / Local MongoDB successfully');
 
+    // Auto-seed demo shop if database is empty (e.g. fresh Render deployment)
+    try {
+      const Shop = require('./models/Shop');
+      const shopCount = await Shop.countDocuments();
+      if (shopCount === 0) {
+        console.log('[Auto-Seed] No shops detected in database. Seeding demo shop & demo accounts...');
+        const seed = require('./seed');
+        await seed({ exitOnComplete: false });
+      }
+    } catch (seedErr) {
+      console.warn('[Auto-Seed] Non-fatal auto-seed warning:', seedErr.message);
+    }
+
     // Start cron jobs if configured
     try {
       const { initCronJobs } = require('./cron/cleanup');
