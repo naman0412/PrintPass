@@ -178,7 +178,7 @@ const storeBufferInGridFS = (buffer, filename, contentType = 'application/pdf') 
     });
 
     uploadStream.on('error', (err) => reject(err));
-    uploadStream.on('finish', (file) => resolve(file._id));
+    uploadStream.on('finish', () => resolve(uploadStream.id));
 
     uploadStream.end(buffer);
   });
@@ -220,6 +220,21 @@ const deleteFileFromGridFS = async (fileId) => {
   }
 };
 
+/**
+ * Checks if a file exists in GridFS
+ */
+const checkFileExistsInGridFS = async (fileId) => {
+  if (!fileId) return false;
+  try {
+    const bucket = getGridFSBucket();
+    const objId = typeof fileId === 'string' ? new mongoose.Types.ObjectId(fileId) : fileId;
+    const files = await bucket.find({ _id: objId }).toArray();
+    return files.length > 0;
+  } catch (err) {
+    return false;
+  }
+};
+
 module.exports = {
   countPdfPages,
   convertImageToPdf,
@@ -227,5 +242,6 @@ module.exports = {
   processAndStoreUpload,
   storeBufferInGridFS,
   getBufferFromGridFS,
-  deleteFileFromGridFS
+  deleteFileFromGridFS,
+  checkFileExistsInGridFS
 };

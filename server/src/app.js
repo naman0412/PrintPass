@@ -105,12 +105,8 @@ app.use('/api/files', fileRoutes);
 const paymentRoutes = require('./routes/payments');
 app.use('/api/payments', paymentRoutes);
 
-try {
-  const agentRoutes = require('./routes/agent');
-  app.use('/api/agent', agentRoutes);
-} catch (e) {
-  // Mounted in Phase 5
-}
+const agentRoutes = require('./routes/agent');
+app.use('/api/agent', agentRoutes);
 
 // Serve static frontend build in production
 if (config.isProduction || process.env.SERVE_STATIC === 'true') {
