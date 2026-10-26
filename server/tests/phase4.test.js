@@ -255,5 +255,29 @@ describe('Phase 4: Privacy & Automatic File Deletion', () => {
       expect(res.status).toBe(200);
       expect(res.body.job.fileId).toBeUndefined(); // fileId stripped for privacy
     });
+
+    it('Agent endpoints must REJECT missing agent key with 401', async () => {
+      const heartbeatRes = await request(app).post('/api/agent/heartbeat');
+      expect(heartbeatRes.status).toBe(401);
+      expect(heartbeatRes.body.error).toMatch(/Agent key missing/i);
+
+      const nextJobRes = await request(app).get('/api/agent/jobs/next');
+      expect(nextJobRes.status).toBe(401);
+    });
+
+    it('Agent endpoints must REJECT bad/invalid agent key with 403', async () => {
+      const heartbeatRes = await request(app)
+        .post('/api/agent/heartbeat')
+        .set('x-agent-key', 'completely_invalid_key_999');
+
+      expect(heartbeatRes.status).toBe(403);
+      expect(heartbeatRes.body.error).toMatch(/Invalid agent key/i);
+
+      const nextJobRes = await request(app)
+        .get('/api/agent/jobs/next')
+        .set('x-agent-key', 'completely_invalid_key_999');
+
+      expect(nextJobRes.status).toBe(403);
+    });
   });
 });
