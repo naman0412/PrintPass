@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import {
   Printer,
@@ -19,8 +19,17 @@ import {
 export const RegisterPage = () => {
   const { register, registerShop } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
-  const [activeTab, setActiveTab] = useState('student'); // 'student' | 'shop'
+  const initialTab = searchParams.get('tab') === 'shop' || searchParams.get('type') === 'kiosk' ? 'shop' : 'student';
+  const [activeTab, setActiveTab] = useState(initialTab);
+
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab === 'shop' || searchParams.get('type') === 'kiosk') {
+      setActiveTab('shop');
+    }
+  }, [searchParams]);
 
   // Student form state
   const [studentForm, setStudentForm] = useState({

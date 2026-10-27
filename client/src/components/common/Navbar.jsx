@@ -98,13 +98,22 @@ export const Navbar = () => {
               </button>
             </div>
           ) : (
-            <Link
-              to="/login"
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-all shadow-indigo-200"
-            >
-              <LogIn className="w-4 h-4" />
-              <span>Log in</span>
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link
+                to="/register?tab=shop"
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 transition-all"
+              >
+                <Store className="w-3.5 h-3.5 text-amber-600" />
+                <span>Register Kiosk</span>
+              </Link>
+              <Link
+                to="/login"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-all shadow-indigo-200"
+              >
+                <LogIn className="w-4 h-4" />
+                <span>Log in</span>
+              </Link>
+            </div>
           )}
         </nav>
       </div>

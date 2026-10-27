@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { Printer, Lock, Mail, AlertCircle, ArrowRight } from 'lucide-react';
+import { Printer, Lock, Mail, AlertCircle, ArrowRight, Store } from 'lucide-react';
 
 export const LoginPage = () => {
   const { login } = useAuth();
@@ -127,12 +127,37 @@ export const LoginPage = () => {
           </button>
         </form>
 
-        <p className="text-center text-xs text-slate-500">
-          Need an account?{' '}
-          <Link to="/register" className="font-bold text-indigo-600 hover:underline">
-            Register as Student
-          </Link>
-        </p>
+        <div className="pt-2 border-t border-slate-100 space-y-3">
+          {/* Direct Photocopy Kiosk Registration Banner */}
+          <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-sm">
+                <Store className="w-4 h-4" />
+              </div>
+              <div className="text-left">
+                <span className="block text-xs font-bold text-amber-950">Own a Photocopy Shop?</span>
+                <span className="block text-[11px] text-amber-700">Automate your campus print queue</span>
+              </div>
+            </div>
+            <Link
+              to="/register?tab=shop"
+              className="px-3 py-1.5 rounded-xl bg-white border border-amber-300 text-amber-900 font-bold text-xs hover:bg-amber-100 transition-colors shrink-0 shadow-sm"
+            >
+              Register Kiosk
+            </Link>
+          </div>
+
+          <div className="flex items-center justify-center gap-2 text-xs text-slate-500">
+            <span>Don't have an account?</span>
+            <Link to="/register" className="font-bold text-indigo-600 hover:underline">
+              Student Sign Up
+            </Link>
+            <span>•</span>
+            <Link to="/register?tab=shop" className="font-bold text-amber-700 hover:underline">
+              Kiosk Sign Up
+            </Link>
+          </div>
+        </div>
       </div>
     </div>
   );
