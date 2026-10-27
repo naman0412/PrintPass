@@ -42,6 +42,14 @@ export const AuthProvider = ({ children }) => {
     return data;
   };
 
+  const registerShop = async (shopData) => {
+    const data = await api.registerShop(shopData);
+    if (data.success && data.user) {
+      setUser(data.user);
+    }
+    return data;
+  };
+
   const logout = async () => {
     try {
       await api.logout();
@@ -52,7 +60,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, refreshUser: checkAuth }}>
+    <AuthContext.Provider value={{ user, loading, login, register, registerShop, logout, refreshUser: checkAuth }}>
       {children}
     </AuthContext.Provider>
   );

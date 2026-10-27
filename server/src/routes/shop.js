@@ -1,8 +1,132 @@
 const express = require('express');
 const router = express.Router();
+const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
 const Shop = require('../models/Shop');
+const User = require('../models/User');
 const { Job } = require('../models/Job');
 const { authenticate, requireRole, requireShopStaff } = require('../middleware/auth');
+const config = require('../config/env');
+
+// POST /api/shops/register - External Photocopy Kiosk Self-Onboarding
+router.post('/register', async (req, res, next) => {
+  try {
+    const {
+      name,
+      code,
+      address,
+      phone,
+      ownerName,
+      ownerEmail,
+      ownerPassword,
+      pricing,
+      settings
+    } = req.body;
+
+    if (!name || !code || !address || !ownerName || !ownerEmail || !ownerPassword) {
+      return res.status(400).json({
+        success: false,
+        error: 'name, code, address, ownerName, ownerEmail, and ownerPassword are required'
+      });
+    }
+
+    const cleanCode = code.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-');
+
+    // Check if shop code or owner email already exists
+    const [existingShop, existingUser] = await Promise.all([
+      Shop.findOne({ code: cleanCode }),
+      User.findOne({ email: ownerEmail.trim().toLowerCase() })
+    ]);
+
+    if (existingShop) {
+      return res.status(409).json({ success: false, error: 'A shop with this unique code already exists.' });
+    }
+    if (existingUser) {
+      return res.status(409).json({ success: false, error: 'An account with this email already exists.' });
+    }
+
+    // Generate unique agent key for the new shop
+    const agentKey = `pp_agent_${cleanCode}_${crypto.randomBytes(8).toString('hex')}`;
+
+    const shop = await Shop.create({
+      name: name.trim(),
+      code: cleanCode,
+      address: address.trim(),
+      phone: phone || '',
+      pricing: {
+        bwPerPage: pricing?.bwPerPage || 2.0,
+        colorPerPage: pricing?.colorPerPage || 10.0,
+        duplexDiscount: pricing?.duplexDiscount || 0.5,
+        spiral: pricing?.spiral || 30.0,
+        staple: pricing?.staple || 5.0,
+        punch: pricing?.punch || 2.0,
+        a3Multiplier: pricing?.a3Multiplier || 2.0
+      },
+      settings: {
+        slotMinutes: settings?.slotMinutes || 15,
+        slotCapacityPages: settings?.slotCapacityPages || 200,
+        slotCapacityJobs: settings?.slotCapacityJobs || 10,
+        pagesPerMinute: settings?.pagesPerMinute || 25,
+        bufferMinutes: settings?.bufferMinutes || 5,
+        openTime: settings?.openTime || '08:00',
+        closeTime: settings?.closeTime || '20:00',
+        isPaused: false
+      },
+      agentKey
+    });
+
+    const owner = await User.create({
+      name: ownerName.trim(),
+      email: ownerEmail.trim().toLowerCase(),
+      password: ownerPassword,
+      role: 'owner',
+      shopId: shop._id,
+      phone: phone || ''
+    });
+
+    // Create session token and set httpOnly cookie
+    const token = jwt.sign(
+      {
+        id: owner._id,
+        email: owner.email,
+        role: owner.role,
+        shopId: shop._id
+      },
+      config.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    const cookieOptions = {
+      expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      httpOnly: true,
+      secure: config.isProduction,
+      sameSite: config.isProduction ? 'none' : 'lax'
+    };
+    res.cookie('token', token, cookieOptions);
+
+    res.status(201).json({
+      success: true,
+      message: 'Photocopy kiosk and Owner account registered successfully!',
+      token,
+      shop: {
+        id: shop._id,
+        name: shop.name,
+        code: shop.code,
+        address: shop.address,
+        agentKey: shop.agentKey
+      },
+      user: {
+        id: owner._id,
+        name: owner.name,
+        email: owner.email,
+        role: owner.role,
+        shopId: shop._id
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+});
 
 // GET /api/shops - list public shops
 router.get('/', async (req, res, next) => {

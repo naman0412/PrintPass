@@ -39,6 +39,15 @@ export const api = {
   },
 
   // Shops
+  async registerShop(shopData) {
+    const res = await fetch(`${BASE_URL}/shops/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(shopData)
+    });
+    return handleResponse(res);
+  },
+
   async getShops() {
     const res = await fetch(`${BASE_URL}/shops`);
     return handleResponse(res);
